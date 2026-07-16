@@ -9,7 +9,7 @@
 The PiNS Prover processes batches of domain transactions, verifying all cryptographic and state transition rules off-chain before committing state changes to the blockchain.
 
 ### Supported Operations
-- **`REG` (Register)**: Initial registration of a domain mapped to a Bech32 (`ps...`) target address and Ed25519 public key.
+- **`REG` (Register)**: Initial registration of a domain mapped to a Bech32 (`ptestsapling...`) target address and Ed25519 public key.
 - **`UPD` (Update)**: Updating target addresses for existing domains.
 - **`CHG` (Change Owner)**: Transferring domain ownership to a new Ed25519 public key.
 - **`LST` (List)**: Listing a domain for sale on the marketplace at a specified price.

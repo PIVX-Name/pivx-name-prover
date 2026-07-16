@@ -83,7 +83,7 @@ pub fn main() {
         );
         assert!(
             is_address_valid(&tx.target_address),
-            "CRITICAL: Target address '{}' is not a valid Bech32 string", tx.target_address
+            "CRITICAL: Target address '{}' is not a valid PIVX Testnet Sapling address (must start with 'ptestsapling' and be 88 characters long)", tx.target_address
         );
 
         // 3. STRICT LOGICAL CHECKS & INVARIANT VERIFICATION
@@ -362,8 +362,11 @@ fn is_domain_valid(domain: &str) -> bool {
 }
 
 fn is_address_valid(address: &str) -> bool {
+    if address.len() != 88 {
+        return false;
+    }
     if let Ok((hrp, _, _)) = bech32::decode(address) {
-        return hrp == "pts";
+        return hrp == "ptestsapling";
     }
     false
 }
