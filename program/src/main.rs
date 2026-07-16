@@ -362,11 +362,13 @@ fn is_domain_valid(domain: &str) -> bool {
 }
 
 fn is_address_valid(address: &str) -> bool {
-    if address.len() != 88 {
-        return false;
-    }
+    // TODO remove comment!!
+    //if address.len() != 88 {
+    //    return false;
+    //}
     if let Ok((hrp, _, _)) = bech32::decode(address) {
-        return hrp == "ptestsapling";
+	// TODO fix
+        return (hrp == "ptestsapling" || hrp == "pts");
     }
     false
 }
