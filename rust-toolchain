@@ -1,3 +1,6 @@
 [toolchain]
-channel = "stable"
+# Pinned for reproducible HOST (`script`) builds. Note this does NOT affect the
+# guest ELF or the vKey: `cargo prove build` compiles the guest with the SP1
+# `succinct` toolchain installed by sp1up. See the note in README.md.
+channel = "1.96.0"
 components = ["llvm-tools", "rustc-dev"]

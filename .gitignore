@@ -1,4 +1,7 @@
+# IDE
 .idea
+.claude
+CLAUDE.md
 
 # Cargo build
 **/target
@@ -17,5 +20,24 @@ pgo-data.profdata
 **/proof-with-pis.json
 **/proof-with-io.json
 
+# Prover run artefacts. `fixtures/1_batch.json` is a committed, deterministic example
+# batch (see the README) - everything else in that directory is output from a local run:
+# logs append across reruns, and the proof/public-value blobs are specific to one build's
+# vKey, so a stale committed copy would mislead anyone trying to verify against it.
+fixtures/*_debug.log
+fixtures/*_error.txt
+fixtures/*_proof.bin
+fixtures/*_public_values.bin
+fixtures/*_result.json
+fixtures/*_evm_tx*
+fixtures/*_receipt.json
+
+/batch_example
+
+# Python bytecode from running the reference implementation
+__pycache__/
+*.pyc
+
 # Env
 .env
+

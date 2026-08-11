@@ -1,0 +1,46 @@
+[package]
+version = "0.1.0"
+name = "pins-core"
+edition = "2021"
+
+# Protocol logic shared by the zkVM guest (`program`), the host runner (`script`),
+# the rr-proxy daemon that owns the tree, and the fixture generator. Anything that
+# BOTH sides of the host/guest boundary must agree on byte-for-byte belongs here, so
+# the implementations can never drift apart.
+
+[dependencies]
+# --- Data Serialization ---
+serde = { version = "1.0", features = ["derive"] }
+
+# --- Hashing (always required: leaf/node hashing and the SMT are the core) ---
+# Kept at default-features = false to match the guest's configuration, so pulling
+# this crate into the guest does not grow the RISC-V ELF.
+sha2 = { version = "0.10.9", default-features = false }
+
+# --- Optional: signature verification (guest only) ---
+ed25519-dalek = { version = "2", default-features = false, optional = true }
+
+# --- Optional: PIVX Sapling address validation (guest only, no_std compatible) ---
+bech32 = { version = "0.9", default-features = false, optional = true }
+
+[features]
+# The prover needs everything. Consumers that only speak the tree — notably the
+# rr-proxy daemon — should use `default-features = false` to avoid pulling in the
+# address and signature stacks they never call.
+default = ["validation", "signatures"]
+
+# Domain and PIVX Sapling address validation.
+validation = ["dep:bech32"]
+
+# Ed25519 signature verification.
+signatures = ["dep:ed25519-dalek"]
+
+# An in-memory compact SMT built declaratively from the key set. Used to cross-check
+# the incremental verifier and to build fixtures; never compiled into the guest.
+reference-tree = []
+
+# Builds the protocol for a testnet deployment: signed messages carry the `tPiNS:`
+# prefix instead of `PiNS:`, and target addresses must be testnet Sapling addresses.
+# Because the prefix is compiled into the guest ELF, a testnet build also gets a
+# distinct vKey, so mainnet and testnet proofs are not interchangeable either.
+testnet = []

@@ -9,7 +9,7 @@
 The PiNS Prover processes batches of domain transactions, verifying all cryptographic and state transition rules off-chain before committing state changes to the blockchain.
 
 ### Supported Operations
-- **`REG` (Register)**: Initial registration of a domain mapped to a Bech32 (`ptestsapling...`) target address and Ed25519 public key.
+- **`REG` (Register)**: Initial registration of a domain mapped to a PIVX Sapling shielded target address (`ps1...` on mainnet, `pts1...` on testnet) and an Ed25519 public key.
 - **`UPD` (Update)**: Updating target addresses for existing domains.
 - **`CHG` (Change Owner)**: Transferring domain ownership to a new Ed25519 public key.
 - **`LST` (List)**: Listing a domain for sale on the marketplace at a specified price.
@@ -19,9 +19,9 @@ The PiNS Prover processes batches of domain transactions, verifying all cryptogr
 ### What the Guest Program (`program`) Does
 For each transaction in a batch, the guest program running inside the zkVM strictly enforces:
 1. **Replay Protection**: Verifies sequential nonces (`nonce > old_nonce`).
-2. **Input Validation**: Ensures valid domain string rules and Bech32 address formats.
+2. **Input Validation**: Ensures valid domain string rules (TLDs `.pivx`, `.private`, `.secure` and `.safe`) and PIVX Sapling address formats for the network the build targets.
 3. **Cryptographic Signatures**: Validates Ed25519 signatures of domain owners.
-4. **State Transition Integrity**: Validates and updates leaf nodes in a 128-level Sparse Merkle Tree (SMT).
+4. **State Transition Integrity**: Validates and updates leaf nodes in a 128-level Sparse Merkle Tree (SMT). Leaf and internal-node hashes are domain-separated by a `0x00` / `0x01` tag prefix, so a leaf preimage can never be reinterpreted as an internal node. **The host that builds the tree must apply the identical tags**, including when deriving its empty-subtree constant ladder (`E₀ = 0×32`, `E₍ᵢ₊₁₎ = SHA256(0x01 ‖ Eᵢ ‖ Eᵢ)`).
 5. **ABI Commit**: Encodes and commits the initial root (`old_root`), final root (`new_root`), and target block height (`end_block_height`) as public values.
 
 ---
@@ -37,40 +37,86 @@ For each transaction in a batch, the guest program running inside the zkVM stric
 
 ## 🔗 Smart Contract Integration & Trustless State
 
-The PiNS Prover operates in tandem with the **Arbitrum Smart Contract**:  
-👉 **[PIVX_Ninja/pivx-name-evm-anchor](https://github.com/PIVX_Ninja/pivx-name-evm-anchor)**
+The PiNS Prover operates in tandem with the **EVM anchor contract**:  
+👉 **[PIVX-Name/pivx-name-evm-anchor](https://github.com/PIVX-Name/pivx-name-evm-anchor)**
 
 ### How Trustlessness is Achieved
 1. **Off-Chain Execution, On-Chain Verification**: Sequencers bundle domain transactions off-chain and run the PiNS Prover script to generate a Groth16 SNARK proof along with public outputs (`old_root`, `new_root`).
-2. **Cryptographic Proof Verification**: The proof and public values are submitted to the EVM smart contract deployed on Arbitrum. The contract verifies the proof via the SP1 Verifier contract on-chain.
-3. **No-Trust Obligation**: The smart contract does not need to trust the sequencer or operator executing the prover. The cryptographic proof mathematically guarantees that:
+2. **Cryptographic Proof Verification**: The proof and public values are submitted to the EVM anchor contract. The contract verifies the proof via the SP1 Verifier contract on-chain.
+3. **What the proof guarantees**: The smart contract does not have to re-execute the batch or scan PIVX. Given the inputs supplied, the proof mathematically guarantees that:
    - All transactions inside the batch were validly signed by their respective owners.
    - The state root transition from `old_root` to `new_root` strictly follows protocol rules without state corruption.
    - No invalid registrations, double-spends, or unauthorized domain transfers occurred.
 
+4. **What the proof does *not* guarantee — and what covers it**: the proof says nothing about whether those inputs were the *real* command stream. A registrar could prove a perfectly valid transition over a censored or invented set of commands. That half is covered by **public replication, not cryptography**:
+
+   - Every command is a shielded note sent to the registrar's protocol address, with the payment as its value and the signed command in its 512-byte Sapling memo — atomically bound.
+   - The registrar **publishes the viewing key for that address**, so anyone can decrypt the entire command history from genesis, in canonical chain order.
+   - The indexer is open source and deterministic, so any third party replays that history, computes the SMT root independently, and compares it with the root anchored on-chain.
+
+   A registrar that censors, invents, mis-credits or reorders produces a root that every independent indexer contradicts. The system is therefore **fraud-evident**: deviation is detectable by anyone without permission, though a bad batch can land on-chain and be contradicted afterwards rather than being prevented outright.
+
+> [!NOTE]
+> Payments *in* are fully auditable this way. Notes the registrar *sends* — seller
+> payouts and losing-bidder refunds — require the extended full viewing key rather than an
+> incoming-only key to be visible. See the trust-model section of `CLAUDE.md`.
+
 ### Verification Key (`vKey`) & On-Chain Connection
 - **What is a `vKey`?** When the guest program code (`program`) is compiled into a RISC-V ELF binary, SP1 computes a unique cryptographic 32-byte identifier called the **Program Verification Key (`vKey`)**. Any modification to the guest logic, dependencies, or code will alter this `vKey`.
-- **Connecting to Smart Contract**: The Arbitrum smart contract stores this exact `programVKey` on-chain. When a proof is submitted, the on-chain SP1 Verifier contract checks that the proof was generated specifically by the program matching this registered `vKey`. If a registrar attempts to run modified or malicious program code, the generated proof will be bound to a different `vKey` and rejected by the smart contract.
+- **Connecting to Smart Contract**: The anchor contract stores this exact `programVKey` on-chain. When a proof is submitted, the on-chain SP1 Verifier contract checks that the proof was generated specifically by the program matching this registered `vKey`. If a registrar attempts to run modified or malicious program code, the generated proof will be bound to a different `vKey` and rejected by the smart contract.
 
 ### Proving Open-Source Immutability (Reproducible Builds)
 - Anyone can audit and verify that the registrar is running the exact, untampered open-source code from this repository.
 - By running a deterministic Docker build (`cargo prove build --docker`), SP1 compiles the Rust guest code inside a standardized environment, producing an identical RISC-V ELF binary and `vKey` anywhere.
-- Comparing your locally compiled `vKey` with the `programVKey` registered in the Arbitrum smart contract mathematically proves that the deployed, active prover on the registrar side corresponds 1:1 with this open-source code.
+- Comparing your locally compiled `vKey` with the `programVKey` registered in the anchor contract mathematically proves that the deployed, active prover on the registrar side corresponds 1:1 with this open-source code.
 
 ---
 
 ## 📁 Repository Structure
 
 ```
+├── pins-core/          # Shared protocol logic (the wire format's single source of truth)
+│   ├── Cargo.toml
+│   └── src/lib.rs     # Batch structs, leaf/node hashing, SMT, signed messages, validation
+│                      # + golden-vector tests a host implementation must reproduce
 ├── program/           # ZK Guest Program (runs inside SP1 zkVM)
 │   ├── Cargo.toml
-│   └── src/main.rs    # Core validation & SMT state transition logic
+│   └── src/main.rs    # Per-operation invariants & state transition driver
 ├── script/            # Host Prover Executable (CLI script)
 │   ├── Cargo.toml
 │   └── src/main.rs    # SP1 Prover Client runner & proof generator
 ├── Cargo.toml         # Workspace manifest with SP1 patched cryptographic crates
 └── README.md
 ```
+
+### Interoperating with the host
+
+Anything both the prover and the host (the PHP backend, a signing wallet) must agree
+on byte-for-byte lives in **`pins-core`** — the batch structures, the exact bytes that
+get signed for each operation, the leaf and node hash functions, and the Merkle path
+traversal order. It was previously duplicated between the guest and the runner.
+
+`pins-core` ships golden-vector tests covering the leaf hash, the empty-subtree
+ladder, the path bit-ordering and all six signed-message formats. **A host
+implementation should reproduce every one of those values.** If it cannot, the two
+sides disagree and proofs will not verify:
+
+```bash
+cargo test -p pins-core
+```
+
+### Network builds
+
+The protocol is parameterised at compile time:
+
+| Build | Message prefix | Accepted addresses | vKey |
+|:---|:---|:---|:---|
+| default | `PiNS:1:` | mainnet Sapling (`ps1…`, 78 chars) | mainnet |
+| `--features testnet` | `tPiNS:1:` | testnet Sapling (`pts1…`, 79 chars) | distinct |
+
+Because the prefix is compiled into the guest ELF, the two networks get different
+vKeys, so a testnet proof cannot be submitted to the mainnet contract — and a
+signature produced against a testnet deployment can never be replayed onto mainnet.
 
 ---
 
@@ -92,3 +138,48 @@ For deterministic/reproducible builds using Docker (to verify `vKey` matching):
 cd program
 cargo prove build --docker
 ```
+
+> [!NOTE]
+> The guest ELF — and therefore the `vKey` — is compiled by the SP1 `succinct`
+> toolchain installed by `sp1up`, **not** by the toolchain named in `/rust-toolchain`
+> (which governs only the host `script` build). `vKey` reproducibility depends on the
+> SP1 toolchain version, the committed `Cargo.lock`, and the guest source. Use
+> `--docker` to pin all of them at once.
+
+### Running the Prover
+
+The prover is invoked per batch. It reads `{batch_id}_batch.json` from `--batch-dir`
+and writes its outputs alongside it.
+
+Validate a batch cheaply, without paying for proving (reports the zkVM cycle count):
+```bash
+cargo run --release -- --batch-dir /path/to/batches --batch-id 42 --execute
+```
+
+Generate the Groth16 proof for on-chain submission:
+```bash
+cargo run --release -- --batch-dir /path/to/batches --batch-id 42
+```
+
+Set the proving backend via `SP1_PROVER` (see `.env.example`). The `mock` and `light`
+modes cannot produce an on-chain-verifiable proof and are rejected unless
+`--allow-mock` is passed; even then `{batch_id}_result.json` is withheld so a
+sequencer can never submit an unusable proof.
+
+#### Outputs
+
+| File | Written when | Purpose |
+|:---|:---|:---|
+| `{batch_id}_proof.bin` | proof generated | Groth16 proof bytes for the EVM verifier |
+| `{batch_id}_public_values.bin` | proof generated | ABI-encoded `(old_root, new_root, end_block_height)` |
+| `{batch_id}_result.json` | proof generated **and** verified locally | The sequencer's "ready to submit" signal |
+| `{batch_id}_debug.log` | always | Full trace log (appends across reruns) |
+| `{batch_id}_error.txt` | on failure | The reason the batch failed |
+
+#### Exit codes
+
+| Code | Meaning |
+|:---|:---|
+| `0` | Success |
+| `1` | Run failed — `{batch_id}_error.txt` contains the reason |
+| `2` | Bad invocation — `--batch-dir`/`--batch-id` failed to parse, so no error file could be written. Details on stderr. |
