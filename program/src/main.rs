@@ -68,10 +68,19 @@ pub fn main() {
         );
 
         // 2. INPUT DATA VALIDATION
-        assert!(
-            is_domain_valid(&tx.domain_name),
-            "CRITICAL: Domain name '{}' failed validation rules", tx.domain_name
-        );
+        //
+        // Only REG validates the domain string: it is the one operation that introduces a
+        // domain into the tree. For every other operation the domain is pinned by the
+        // Merkle proof — the leaf commits the domain and the path key is derived from it,
+        // so a provable non-REG can only name a domain some earlier REG already validated.
+        // This is the same induction `Op::binds_target_address` relies on for the address,
+        // and it holds for the same reason: the genesis root is the empty tree.
+        if op == Op::Reg {
+            assert!(
+                is_domain_valid(&tx.domain_name),
+                "CRITICAL: Domain name '{}' failed validation rules", tx.domain_name
+            );
+        }
         // Only operations that carry an address need to validate it; for the rest the
         // leaf pins it to a previously validated value. See `Op::binds_target_address`.
         if op.binds_target_address() {
