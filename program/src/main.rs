@@ -7,8 +7,8 @@ use alloy_sol_types::{sol, SolValue};
 use ed25519_dalek::VerifyingKey;
 
 use pins_core::{
-    hash_leaf, is_address_valid, is_domain_valid, is_signature_valid, signing_message,
-    verify_and_apply, BatchPayload, Hash, Op,
+    hash_leaf, is_address_valid, is_blocking_record_valid, is_domain_valid, is_signature_valid,
+    signing_message, verify_and_apply, BatchPayload, Hash, Op, Terminal,
 };
 
 sol! {
@@ -223,6 +223,18 @@ pub fn main() {
                 (Some(old_leaf), new_leaf)
             },
         };
+
+        // A blocking record is the one input here that nobody signs, and its domain decides
+        // where the split puts the blocking leaf. Its preimage is checked against the leaf
+        // only by hash, and the leaf hash does not delimit its fields, so the record must be
+        // cut the one way a real leaf is. See `pins_core::is_blocking_record_valid`.
+        if let Terminal::Blocked { record } = &tx.proof.terminal {
+            assert!(
+                is_blocking_record_valid(record),
+                "CRITICAL: Blocking record '{}' for domain '{}' is not a valid leaf preimage",
+                record.domain, tx.domain_name
+            );
+        }
 
         let (calc_root, next_root) =
             verify_and_apply(&tx.domain_name, &tx.proof, expected_old_leaf, new_leaf);

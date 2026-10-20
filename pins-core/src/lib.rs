@@ -358,8 +358,11 @@ pub fn is_domain_valid(domain: &str) -> bool {
 ///
 /// What is deliberately *not* checked is whether `pk_d` is a valid Jubjub curve point.
 /// That would need unaccelerated field arithmetic inside the zkVM, and it only affects
-/// whether the *owner* can be paid — never the integrity of the tree. The registrar
-/// rejects unspendable addresses at ingest, where a real curve check is cheap.
+/// whether the *owner* can be paid — never the integrity of the tree. No other part checks
+/// it either: the indexer and the registrar apply these same four rules. An address with no
+/// Sapling key behind it is refused only when somebody tries to pay it — a sender's wallet
+/// for a name pointing at it, and the registrar's payouts, which isolate a withdrawal to
+/// such an address rather than let it fail the payouts batched with it.
 #[cfg(feature = "validation")]
 pub fn is_address_valid(address: &str) -> bool {
     if address.len() != EXPECTED_ADDRESS_LEN {
@@ -386,6 +389,27 @@ pub fn is_address_valid(address: &str) -> bool {
         }
         Err(_) => false,
     }
+}
+
+/// Whether a `Terminal::Blocked` record can be the preimage of a leaf in the tree.
+///
+/// [`hash_leaf`] concatenates `domain ‖ pubkey ‖ target_address` with no length prefixes,
+/// so the bytes of one leaf can be cut into more than one record. Shift the boundary
+/// between the domain and the pubkey — and with it the one between the pubkey and the
+/// address — and the leaf hash stays the same while `record.domain`, and so the blocking
+/// key, changes. That reopens the attack the full record exists to close
+/// (`docs/compact-smt.md` §5.3): the prover picks the divergence bit, strands the blocking
+/// domain's leaf off its own path, and can then prove that domain absent and register it
+/// again.
+///
+/// Every leaf in the tree carries a valid domain (REG validates it) and a target address
+/// of exactly [`EXPECTED_ADDRESS_LEN`] characters (REG, UPD and BUY validate it; CHG, LST
+/// and ULT carry it over). Requiring the same of the record fixes the address length,
+/// hence the domain length, hence the one way to cut the preimage. Both checks are cheap;
+/// the full bech32 decode is not needed for this.
+#[cfg(feature = "validation")]
+pub fn is_blocking_record_valid(record: &LeafRecord) -> bool {
+    record.target_address.len() == EXPECTED_ADDRESS_LEN && is_domain_valid(&record.domain)
 }
 
 // ---------------------------------------------------------------------------
@@ -720,6 +744,44 @@ mod tests {
             assert_eq!(EXPECTED_HRP, "ps");
             assert_eq!(EXPECTED_ADDRESS_LEN, 78);
         }
+    }
+
+    // -- Blocking records ---------------------------------------------------
+
+    /// The leaf preimage concatenates variable-length fields, so a real leaf's bytes can be
+    /// re-cut into another record with the same hash but a different domain — and so a
+    /// different blocking key. The guard must accept the real cut and refuse the other.
+    #[cfg(feature = "validation")]
+    #[test]
+    fn a_recut_blocking_record_hashes_the_same_but_is_refused() {
+        let (ours, _) = network_vectors();
+        let mut pubkey = [7u8; 32];
+        // An ASCII last byte, so the address side of the re-cut is still valid UTF-8.
+        pubkey[31] = b'q';
+        let real = LeafRecord {
+            domain: DOMAIN.into(),
+            pubkey,
+            target_address: ours.into(),
+            price: 0,
+            nonce: 42,
+        };
+
+        // The domain's last byte moves into the pubkey, the pubkey's last into the address.
+        let mut recut_pubkey = [0u8; 32];
+        recut_pubkey[0] = *DOMAIN.as_bytes().last().unwrap();
+        recut_pubkey[1..].copy_from_slice(&pubkey[..31]);
+        let recut = LeafRecord {
+            domain: DOMAIN[..DOMAIN.len() - 1].into(),
+            pubkey: recut_pubkey,
+            target_address: format!("q{ours}"),
+            price: 0,
+            nonce: 42,
+        };
+
+        assert_eq!(recut.leaf(), real.leaf(), "the re-cut must be the same preimage");
+        assert_ne!(key_of(&recut.domain), key_of(&real.domain), "yet name another key");
+        assert!(is_blocking_record_valid(&real));
+        assert!(!is_blocking_record_valid(&recut));
     }
 }
 

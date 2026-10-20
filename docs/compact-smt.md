@@ -247,9 +247,11 @@ position that does not match `key(Y)`.
 
 The result is a valid proof committing a root in which `Y` is unreachable: any future
 inclusion proof for `Y` must fold along `key(Y)`, and `Y`'s leaf is no longer there.
-**Any domain could be permanently bricked by registering a name that shares a prefix
-with it.** Not theft — placing `Y`'s leaf somewhere useful would need a `hash_leaf`
-collision — but a cheap, permanent, targeted denial of service.
+**Any domain could be permanently bricked by registering a name that shares a prefix with it.**
+Nor does it stop there. With `Y`'s leaf moved off `key(Y)`'s path, the slot that path
+now ends in is empty, so a *non-inclusion* proof for `Y` verifies — and a `REG` of `Y`,
+under any key, is provable. Stranding is the first step of a hijack, not just a denial
+of service.
 
 Carrying the full preimage closes it: the circuit recomputes `blocking_leaf` from the
 record and derives `blocking_key` from the same `record.domain`, so the hash that gets
@@ -262,6 +264,25 @@ a 250-domain tree it registers a name blocked at depth 8, lies that the blocking
 diverges at bit 127 instead of bit 8, and the unsound verifier accepts, yielding a root
 under which the blocking domain's own inclusion proof no longer verifies. The specified
 verifier rejects the same attempt with *blocking key not on our path*.
+
+Binding `record.domain` to `blocking_leaf` this way holds only if no two records hash to
+the same leaf, and `hash_leaf` alone does not promise it: it concatenates `domain ‖ pubkey ‖ target_address` with no length
+prefixes. Shift the boundary between the domain and the pubkey — the pubkey is fixed
+width, so the boundary with the address shifts with it — and the same bytes make a
+record with another `domain`, another key and the same leaf hash. Only the cuts whose
+domain and address are valid UTF-8 are usable, so a given leaf offers about one or two,
+each with a `2^-d` chance of sharing its first `d` bits with the leaf's own key. Summed
+over the tree (Σ 2^-d over the leaves is at most 1) that leaves about one exploitable
+leaf at any size — a victim of the prover's finding rather than choosing, but one that is
+always there.
+
+The circuit therefore also requires the record to be cut the way every leaf in the tree
+is: a valid domain, and a target address of exactly `EXPECTED_ADDRESS_LEN` characters
+(`pins_core::is_blocking_record_valid`). Every leaf satisfies both — `REG` validates the
+domain, and `REG`, `UPD` and `BUY` the address, which the other operations carry over — and
+a fixed address length fixes the domain length, so exactly one cut remains. The leaf
+format itself is unchanged; restructuring it with length prefixes would have changed every
+leaf hash and forced the tree to be rebuilt.
 
 Cost: one extra `hash_leaf` plus one `SHA256(domain)` on `REG`-into-blocked only —
 about 4 compressions against a saving of ~460.
