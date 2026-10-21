@@ -165,8 +165,8 @@ cargo prove vkey --elf ../target/elf-compilation/docker/riscv64im-succinct-zkvm-
 
 | Source | `vKey` (mainnet) | On the anchor contract |
 |:---|:---|:---|
-| commit `c6149c9` (one commit after `v0.1.0`) | `0x0046a88afaca1610b42da5cb25a6ca8c23cb2686b64a80219a854853c7a58584` | `programVkey()` since the contract's deployment (epoch 1) |
-| `v0.2.0` (`eed27aa`) | `0x00e26d31c74d3ff05bf787cb545bd83cb06571abeceba671b1f9d1249b557225` | to be proposed as the next rules change |
+| `v0.1.1` (`c6149c9`) | `0x0046a88afaca1610b42da5cb25a6ca8c23cb2686b64a80219a854853c7a58584` | `programVkey()` in epoch 1, from the contract's deployment |
+| `v0.2.0` (`5a78105`, same guest as `eed27aa`) | `0x00e26d31c74d3ff05bf787cb545bd83cb06571abeceba671b1f9d1249b557225` | `pendingRulesVkey()` since the rules change was approved on 2026-10-21; `programVkey()` in epoch 2, once that change activates (possible from 2026-10-28 13:45:01 UTC) |
 
 Compare with the anchor contract on BNB Smart Chain (`0xe21df741aab28c1916edb1718f18e62c08fab4bc`,
 see the `pivx-name-evm-anchor` README):
