@@ -67,8 +67,8 @@ The PiNS Prover operates in tandem with the **EVM anchor contract**:
 
 ### Proving Open-Source Immutability (Reproducible Builds)
 - Anyone can audit and verify that the registrar is running the exact, untampered open-source code from this repository.
-- By running a deterministic Docker build (`cargo prove build --docker`), SP1 compiles the Rust guest code inside a standardized environment, producing an identical RISC-V ELF binary and `vKey` anywhere.
-- Comparing your locally compiled `vKey` with the `programVKey` registered in the anchor contract mathematically proves that the deployed, active prover on the registrar side corresponds 1:1 with this open-source code.
+- By running a deterministic Docker build (`cargo prove build --docker --tag v6.3.1`), SP1 compiles the Rust guest code inside a standardized environment, producing an identical RISC-V ELF binary and `vKey` anywhere. The steps, and why both the Docker image and its tag matter, are in [Verifying the vKey](#verifying-the-vkey).
+- Comparing your locally compiled `vKey` with the `programVkey()` registered in the anchor contract mathematically proves that the deployed, active prover on the registrar side corresponds 1:1 with this open-source code.
 
 ---
 
@@ -125,6 +125,7 @@ signature produced against a testnet deployment can never be replayed onto mainn
 ### Requirements
 - **Rust toolchain** (compatible with SP1)
 - **SP1 toolchain (`sp1up`)** installed
+- **Docker**, or Podman with a `docker` alias, to reproduce the `vKey` (see below)
 
 ### Building the Guest Program
 To compile the zkVM guest program into ELF format, navigate to the `program` directory:
@@ -136,15 +137,72 @@ cargo prove build
 For deterministic/reproducible builds using Docker (to verify `vKey` matching):
 ```bash
 cd program
-cargo prove build --docker
+cargo prove build --docker --tag v6.3.1
 ```
 
 > [!NOTE]
 > The guest ELF — and therefore the `vKey` — is compiled by the SP1 `succinct`
 > toolchain installed by `sp1up`, **not** by the toolchain named in `/rust-toolchain`
 > (which governs only the host `script` build). `vKey` reproducibility depends on the
-> SP1 toolchain version, the committed `Cargo.lock`, and the guest source. Use
-> `--docker` to pin all of them at once.
+> SP1 toolchain version, the committed `Cargo.lock`, the guest source, and the path of
+> the cargo home the guest's dependencies are built from. Use `--docker` with `--tag` to
+> pin all of them at once.
+
+### Verifying the vKey
+
+Build the guest in SP1's Docker image from the commit you want to check, then print its
+`vKey`:
+
+```bash
+git checkout v0.2.0            # or a commit from the table below
+cd program
+cargo prove build --docker --tag v6.3.1
+cargo prove vkey --elf ../target/elf-compilation/docker/riscv64im-succinct-zkvm-elf/release/pins-program
+```
+
+`cargo prove vkey` prints `Verification Key Hash:` and the `vKey`. For a testnet build, add
+`--features testnet` to the build; it gives a different `vKey`.
+
+| Source | `vKey` (mainnet) | On the anchor contract |
+|:---|:---|:---|
+| commit `c6149c9` (one commit after `v0.1.0`) | `0x0046a88afaca1610b42da5cb25a6ca8c23cb2686b64a80219a854853c7a58584` | `programVkey()` since the contract's deployment (epoch 1) |
+| `v0.2.0` (`eed27aa`) | `0x00e26d31c74d3ff05bf787cb545bd83cb06571abeceba671b1f9d1249b557225` | to be proposed as the next rules change |
+
+Compare with the anchor contract on BNB Smart Chain (`0xe21df741aab28c1916edb1718f18e62c08fab4bc`,
+see the `pivx-name-evm-anchor` README):
+
+- `programVkey()` (selector `0x09665ee7`): the `vKey` in force now.
+- `pendingRulesVkey()` (selector `0x78aa4dbf`): the `vKey` of a proposed rules change, or zero
+  when there is none. A rules change is timelocked, and `rulesChangeActivatesAt()` says
+  when it can take effect. Check the new `vKey` before then.
+
+```bash
+curl -s -X POST https://bsc-dataseed.bnbchain.org -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":"0xe21df741aab28c1916edb1718f18e62c08fab4bc","data":"0x09665ee7"},"latest"]}'
+```
+
+**Why the Docker image.** The guest ELF contains the absolute paths of the crates it was
+compiled from: panic locations in `sp1-zkvm`, `embedded-alloc`, `bech32` and the patched
+`curve25519-dalek`. So the path of your cargo home is part of the ELF, and of the `vKey`.
+The image builds with its cache at `/root/.cargo`, the same path on every machine.
+
+A native build (`cargo prove build` without `--docker`) reproduces the `vKey` only if your
+cargo home is `/root/.cargo` and `sp1up` installed the same toolchain as the image (SP1
+v6.3.1). Tested on one machine with the same source and the same SP1 toolchain:
+
+| Changed | `vKey` |
+|:---|:---|
+| the workspace path | same |
+| the cargo cache emptied (same path) | same |
+| `CARGO_HOME` moved elsewhere | different |
+
+A `vKey` that differs after a native build is therefore not evidence of a mismatch;
+rebuild with Docker.
+
+**Why `--tag`.** The image carries the guest compiler. Without `--tag`, `cargo prove` uses
+the image matching the `cargo-prove` you have installed, so a different SP1 install can
+bring a different compiler. The tag to use is `v` followed by the `sp1-build` version in
+`Cargo.lock`: `v6.3.1` for the releases above.
 
 ### Running the Prover
 
