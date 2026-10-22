@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # --- Core SP1 SDK ---
-sp1-sdk = { version = "6.3.1", features = ["network"] }
+sp1-sdk = { version = "6.9.0", features = ["network"] }
 
 # --- Shared Protocol Logic (structs, hashing, SMT, signed messages) ---
 # reference-tree gives the fixture generator an in-memory canonical tree to build
@@ -23,7 +23,7 @@ ed25519-dalek = "2"
 bech32 = "0.9"
 
 # --- Smart Contract Integration ---
-alloy-sol-types = "1.6.1"
+alloy-sol-types = "1.7.3"
 hex = "0.4"
 
 # --- CLI & Async Runtime ---
@@ -47,4 +47,4 @@ default = []
 testnet = ["pins-core/testnet"]
 
 [build-dependencies]
-sp1-build = { version = "6.3.1" }
+sp1-build = { version = "6.9.0" }

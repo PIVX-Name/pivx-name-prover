@@ -67,7 +67,7 @@ The PiNS Prover operates in tandem with the **EVM anchor contract**:
 
 ### Proving Open-Source Immutability (Reproducible Builds)
 - Anyone can audit and verify that the registrar is running the exact, untampered open-source code from this repository.
-- By running a deterministic Docker build (`cargo prove build --docker --tag v6.3.1`), SP1 compiles the Rust guest code inside a standardized environment, producing an identical RISC-V ELF binary and `vKey` anywhere. The steps, and why both the Docker image and its tag matter, are in [Verifying the vKey](#verifying-the-vkey).
+- By running a deterministic Docker build (`cargo prove build --docker --tag v6.9.0`), SP1 compiles the Rust guest code inside a standardized environment, producing an identical RISC-V ELF binary and `vKey` anywhere. The steps, and why both the Docker image and its tag matter, are in [Verifying the vKey](#verifying-the-vkey).
 - Comparing your locally compiled `vKey` with the `programVkey()` registered in the anchor contract mathematically proves that the deployed, active prover on the registrar side corresponds 1:1 with this open-source code.
 
 ---
@@ -137,7 +137,7 @@ cargo prove build
 For deterministic/reproducible builds using Docker (to verify `vKey` matching):
 ```bash
 cd program
-cargo prove build --docker --tag v6.3.1
+cargo prove build --docker --tag v6.9.0
 ```
 
 > [!NOTE]
@@ -154,9 +154,9 @@ Build the guest in SP1's Docker image from the commit you want to check, then pr
 `vKey`:
 
 ```bash
-git checkout v0.2.0            # or a commit from the table below
+git checkout v0.2.1            # or a release from the table below, with its --tag (see below)
 cd program
-cargo prove build --docker --tag v6.3.1
+cargo prove build --docker --tag v6.9.0
 cargo prove vkey --elf ../target/elf-compilation/docker/riscv64im-succinct-zkvm-elf/release/pins-program
 ```
 
@@ -166,7 +166,8 @@ cargo prove vkey --elf ../target/elf-compilation/docker/riscv64im-succinct-zkvm-
 | Source | `vKey` (mainnet) | On the anchor contract |
 |:---|:---|:---|
 | `v0.1.1` (`c6149c9`) | `0x0046a88afaca1610b42da5cb25a6ca8c23cb2686b64a80219a854853c7a58584` | `programVkey()` in epoch 1, from the contract's deployment |
-| `v0.2.0` (`5a78105`, same guest as `eed27aa`) | `0x00e26d31c74d3ff05bf787cb545bd83cb06571abeceba671b1f9d1249b557225` | `pendingRulesVkey()` since the rules change was approved on 2026-10-21; `programVkey()` in epoch 2, once that change activates (possible from 2026-10-28 13:45:01 UTC) |
+| `v0.2.0` (`5a78105`, same guest as `eed27aa`) | `0x00e26d31c74d3ff05bf787cb545bd83cb06571abeceba671b1f9d1249b557225` | `pendingRulesVkey()` from its approval on 2026-10-21 until it was reverted, before activation, for `v0.2.1`; never in force |
+| `v0.2.1` (the `v0.2.0` guest source, built with SP1 v6.9.0 and updated dependencies) | `0x0030fb5e4fef5bfaff7b9c6024139f688d234452121b5c9dee4c1fd2a5ece344` | `pendingRulesVkey()` once proposed in place of `v0.2.0`; `programVkey()` in epoch 2, once that change activates (7 days after its approval) |
 
 Compare with the anchor contract on BNB Smart Chain (`0xe21df741aab28c1916edb1718f18e62c08fab4bc`,
 see the `pivx-name-evm-anchor` README):
@@ -187,8 +188,9 @@ compiled from: panic locations in `sp1-zkvm`, `embedded-alloc`, `bech32` and the
 The image builds with its cache at `/root/.cargo`, the same path on every machine.
 
 A native build (`cargo prove build` without `--docker`) reproduces the `vKey` only if your
-cargo home is `/root/.cargo` and `sp1up` installed the same toolchain as the image (SP1
-v6.3.1). Tested on one machine with the same source and the same SP1 toolchain:
+cargo home is `/root/.cargo` and `sp1up` installed the same toolchain as the image (the SP1
+version in `Cargo.lock`). Tested on one machine with the same source and the same SP1
+toolchain:
 
 | Changed | `vKey` |
 |:---|:---|
@@ -202,7 +204,9 @@ rebuild with Docker.
 **Why `--tag`.** The image carries the guest compiler. Without `--tag`, `cargo prove` uses
 the image matching the `cargo-prove` you have installed, so a different SP1 install can
 bring a different compiler. The tag to use is `v` followed by the `sp1-build` version in
-`Cargo.lock`: `v6.3.1` for the releases above.
+`Cargo.lock` of the commit you build: `v6.3.1` for `v0.1.1` and `v0.2.0`, `v6.9.0` for
+`v0.2.1`. Both SP1 versions share the same proof system (circuit `v6.1.0`), so their proofs
+are checked by the same SP1 verifier contract; only the program, and so its `vKey`, differs.
 
 ### Running the Prover
 

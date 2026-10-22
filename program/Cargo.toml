@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # --- Core SP1 SDK ---
-sp1-zkvm = "6.3.1"
+sp1-zkvm = "6.9.0"
 
 # --- Shared Protocol Logic (structs, hashing, SMT, signed messages) ---
 pins-core = { path = "../pins-core" }
@@ -14,7 +14,7 @@ pins-core = { path = "../pins-core" }
 serde = { version = "1.0", features = ["derive"] }
 
 # --- Smart Contract ABI ---
-alloy-sol-types = { version = "1.6.1", default-features = false }
+alloy-sol-types = { version = "1.7.3", default-features = false }
 
 # --- Cryptography (Optimized for ZKVM) ---
 ed25519-dalek = { version = "2", default-features = false }
