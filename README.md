@@ -166,16 +166,20 @@ cargo prove vkey --elf ../target/elf-compilation/docker/riscv64im-succinct-zkvm-
 | Source | `vKey` (mainnet) | On the anchor contract |
 |:---|:---|:---|
 | `v0.1.1` (`c6149c9`) | `0x0046a88afaca1610b42da5cb25a6ca8c23cb2686b64a80219a854853c7a58584` | `programVkey()` in epoch 1, from the contract's deployment |
-| `v0.2.0` (`5a78105`, same guest as `eed27aa`) | `0x00e26d31c74d3ff05bf787cb545bd83cb06571abeceba671b1f9d1249b557225` | `pendingRulesVkey()` from its approval on 2026-10-21 until it was reverted, before activation, for `v0.2.1`; never in force |
-| `v0.2.1` (the `v0.2.0` guest source, built with SP1 v6.9.0 and updated dependencies) | `0x0030fb5e4fef5bfaff7b9c6024139f688d234452121b5c9dee4c1fd2a5ece344` | `pendingRulesVkey()` once proposed in place of `v0.2.0`; `programVkey()` in epoch 2, once that change activates (7 days after its approval) |
+| `v0.2.0` (`5a78105`, same guest as `eed27aa`) | `0x00e26d31c74d3ff05bf787cb545bd83cb06571abeceba671b1f9d1249b557225` | `pendingRulesVkey()` from its approval on 2026-10-21 until it was reverted on 2026-10-22, before activation, for `v0.2.1`; never in force |
+| `v0.2.1` (`e564306`, the `v0.2.0` guest source built with SP1 v6.9.0 and updated dependencies) | `0x0030fb5e4fef5bfaff7b9c6024139f688d234452121b5c9dee4c1fd2a5ece344` | `pendingRulesVkey()` since the rules change was approved on 2026-10-22; `programVkey()` in epoch 2, once that change activates (possible on 2026-10-29, UTC) |
 
 Compare with the anchor contract on BNB Smart Chain (`0xe21df741aab28c1916edb1718f18e62c08fab4bc`,
 see the `pivx-name-evm-anchor` README):
 
 - `programVkey()` (selector `0x09665ee7`): the `vKey` in force now.
 - `pendingRulesVkey()` (selector `0x78aa4dbf`): the `vKey` of a proposed rules change, or zero
-  when there is none. A rules change is timelocked, and `rulesChangeActivatesAt()` says
-  when it can take effect. Check the new `vKey` before then.
+  when there is none. A rules change is timelocked, and `rulesChangeActivatesAt()` (selector
+  `0x90b86556`, a Unix time; zero until the change is approved) says when it can take effect.
+  Check the new `vKey` before then.
+- `epoch()` (selector `0x900cf0cf`): the epoch in force. It goes up by one whenever a rules
+  change activates or the root is rolled back, so the table above names the epoch of each
+  `vKey`.
 
 ```bash
 curl -s -X POST https://bsc-dataseed.bnbchain.org -H 'Content-Type: application/json' \
