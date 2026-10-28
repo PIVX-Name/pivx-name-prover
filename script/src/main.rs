@@ -2,7 +2,7 @@ use sp1_sdk::{include_elf, Elf, ProverClient, SP1Stdin, Prover, ProveRequest, Ha
 use sp1_sdk::env::EnvProver;
 use serde::Serialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use clap::Parser;
 use anyhow::{bail, Context, Result};
 use alloy_sol_types::{sol, SolType};
@@ -187,7 +187,7 @@ fn decode_batch_result(bytes: &[u8]) -> Result<BatchResultABI> {
 }
 
 // The core logic, but now using `?` operators to safely bubble errors up
-async fn run_prover(args: &Args, batch_dir: &PathBuf) -> Result<()> {
+async fn run_prover(args: &Args, batch_dir: &Path) -> Result<()> {
     // Dynamically build all necessary file paths
     let input_json_path = batch_dir.join(format!("{}_batch.json", args.batch_id));
     let proof_bin_path = batch_dir.join(format!("{}_proof.bin", args.batch_id));

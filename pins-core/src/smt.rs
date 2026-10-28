@@ -315,7 +315,7 @@ mod tests {
     fn key_derivation_matches_reference() {
         assert_eq!(hex(&key_of("alice.pivx")), "485017efa5d28fa0bcd37ac0570fc45d");
         assert_eq!(hex(&key_of("bob.pivx")), "ba11057578fc00be5790423524722254");
-        // 0x61 = 0b0110_0001, most-significant-bit first.
+        // 0x48 = 0b0100_1000, most-significant-bit first.
         let k = key_of("alice.pivx");
         let got: Vec<u8> = (0..8).map(|i| key_bit(&k, i) as u8).collect();
         assert_eq!(got, vec![0, 1, 0, 0, 1, 0, 0, 0]);
