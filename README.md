@@ -21,7 +21,7 @@ For each transaction in a batch, the guest program running inside the zkVM stric
 1. **Replay Protection**: Verifies sequential nonces (`nonce > old_nonce`).
 2. **Input Validation**: Ensures valid domain string rules (TLDs `.pivx`, `.private`, `.secure` and `.safe`) and PIVX Sapling address formats for the network the build targets.
 3. **Cryptographic Signatures**: Validates Ed25519 signatures of domain owners.
-4. **State Transition Integrity**: Validates and updates leaf nodes in a 128-level Sparse Merkle Tree (SMT). Leaf and internal-node hashes are domain-separated by a `0x00` / `0x01` tag prefix, so a leaf preimage can never be reinterpreted as an internal node. **The host that builds the tree must apply the identical tags**, including when deriving its empty-subtree constant ladder (`E₀ = 0×32`, `E₍ᵢ₊₁₎ = SHA256(0x01 ‖ Eᵢ ‖ Eᵢ)`).
+4. **State Transition Integrity**: Validates and updates leaf nodes in a compact Sparse Merkle Tree (SMT), keyed by the first 128 bits of `SHA256(domain)`: a leaf sits at the shallowest depth at which it is the only key in its subtree, so a proof carries about log2(N) siblings rather than 128 (see [`docs/compact-smt.md`](docs/compact-smt.md)). Leaf and internal-node hashes are domain-separated by a `0x00` / `0x01` tag prefix, so a leaf preimage can never be reinterpreted as an internal node. **The host that builds the tree must apply the identical tags.** An empty subtree is the single constant `EMPTY` (32 zero bytes) at every height, which is also the root of an empty tree: there is no per-height ladder of empty-subtree hashes.
 5. **ABI Commit**: Encodes and commits the initial root (`old_root`), final root (`new_root`), and target block height (`end_block_height`) as public values.
 
 ---
@@ -96,8 +96,9 @@ on byte-for-byte lives in **`pins-core`** — the batch structures, the exact by
 get signed for each operation, the leaf and node hash functions, and the Merkle path
 traversal order. It was previously duplicated between the guest and the runner.
 
-`pins-core` ships golden-vector tests covering the leaf hash, the empty-subtree
-ladder, the path bit-ordering and all six signed-message formats. **A host
+`pins-core` ships golden-vector tests covering the leaf hash, the empty-tree root,
+the key derivation and path bit-ordering, the roots of a reference registration
+sequence and all six signed-message formats. **A host
 implementation should reproduce every one of those values.** If it cannot, the two
 sides disagree and proofs will not verify:
 
@@ -167,7 +168,7 @@ cargo prove vkey --elf ../target/elf-compilation/docker/riscv64im-succinct-zkvm-
 |:---|:---|:---|
 | `v0.1.1` (`c6149c9`) | `0x0046a88afaca1610b42da5cb25a6ca8c23cb2686b64a80219a854853c7a58584` | `programVkey()` in epoch 1, from the contract's deployment |
 | `v0.2.0` (`5a78105`, same guest as `eed27aa`) | `0x00e26d31c74d3ff05bf787cb545bd83cb06571abeceba671b1f9d1249b557225` | `pendingRulesVkey()` from its approval on 2026-10-21 until it was reverted on 2026-10-22, before activation, for `v0.2.1`; never in force |
-| `v0.2.1` (`e564306`, the `v0.2.0` guest source built with SP1 v6.9.0 and updated dependencies) | `0x0030fb5e4fef5bfaff7b9c6024139f688d234452121b5c9dee4c1fd2a5ece344` | `pendingRulesVkey()` since the rules change was approved on 2026-10-22; `programVkey()` in epoch 2, once that change activates (possible on 2026-10-29, UTC) |
+| `v0.2.1` (`e564306`, the `v0.2.0` guest source built with SP1 v6.9.0 and updated dependencies) | `0x0030fb5e4fef5bfaff7b9c6024139f688d234452121b5c9dee4c1fd2a5ece344` | `pendingRulesVkey()` from the approval of the rules change on 2026-10-22 until it activated (allowed from 2026-10-29 15:13:03 UTC); `programVkey()` in epoch 2 since then |
 
 Compare with the anchor contract on BNB Smart Chain (`0xe21df741aab28c1916edb1718f18e62c08fab4bc`,
 see the `pivx-name-evm-anchor` README):
